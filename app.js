@@ -238,6 +238,16 @@ function renderUserArea() {
 
     userArea.appendChild(nameSpan);
     userArea.appendChild(logoutBtn);
+
+    // 교사 전용: AI 코멘트 생성 버튼 표시
+    if (role === "teacher") {
+      const aiBtn = document.createElement("button");
+      aiBtn.id = "aiCommentBtn";
+      aiBtn.className = "ai-btn";
+      aiBtn.textContent = "🤖 AI 코멘트 생성";
+      aiBtn.addEventListener("click", generateAiComment);
+      userArea.appendChild(aiBtn);
+    }
   } else {
     // 로그아웃 상태: Google 로그인 버튼 표시
     const loginBtn = document.createElement("button");
@@ -254,6 +264,71 @@ function renderUserArea() {
     });
 
     userArea.appendChild(loginBtn);
+  }
+}
+
+
+// ===================================================
+// Gemini AI 코멘트 생성 (백엔드 2)
+// 교사가 버튼을 클릭하면 담벼락의 메모들을 분석하여 AI 피드백 코멘트를 남깁니다.
+// ===================================================
+
+async function generateAiComment() {
+  if (memos.length === 0) {
+    alert("담벼락에 분석할 메모가 없습니다. 먼저 메모를 작성해 주세요.");
+    return;
+  }
+
+  const aiBox = document.getElementById("aiBox");
+  const aiText = document.getElementById("aiText");
+  const aiBtn = document.getElementById("aiCommentBtn");
+
+  if (aiBtn) {
+    aiBtn.disabled = true;
+    aiBtn.textContent = "🤖 AI 생각하는 중...";
+  }
+
+  if (aiBox && aiText) {
+    aiBox.classList.add("show");
+    aiText.textContent = "담벼락 게시물을 읽고 AI가 코멘트를 작성하고 있습니다. 잠시만 기다려 주세요...";
+  }
+
+  try {
+    // 개인정보 보호: 식별자(uid, 이메일 등)는 제외하고 메모 텍스트만 전달
+    const payload = {
+      memos: memos.map(function (m) {
+        return { text: m.text };
+      })
+    };
+
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(function () { return {}; });
+      throw new Error(errData.error || `HTTP 오류 (${response.status})`);
+    }
+
+    const result = await response.json();
+    if (aiText) {
+      aiText.textContent = result.comment;
+    }
+  } catch (error) {
+    console.error("AI 코멘트 생성 오류:", error);
+    if (aiText) {
+      aiText.textContent = `코멘트를 불러오지 못했습니다. (${error.message})\n\n※ Vercel 환경변수(GEMINI_API_KEY) 설정 및 배포 환경에서 정상 동작합니다.`;
+    }
+    alert("AI 코멘트 생성에 실패했습니다: " + error.message);
+  } finally {
+    if (aiBtn) {
+      aiBtn.disabled = false;
+      aiBtn.textContent = "🤖 AI 코멘트 생성";
+    }
   }
 }
 
