@@ -13,7 +13,8 @@ import {
   doc,
   query,
   orderBy,
-  onSnapshot
+  onSnapshot,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 // Firebase 설정
@@ -62,9 +63,15 @@ function loadMemos() {
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
   try {
+    // 보안 규칙 검증: 1자 이상 50자 이하
+    if (text.length > 50) {
+      alert("메모는 50자 이하로 작성해 주세요.");
+      return;
+    }
+
     await addDoc(collection(db, "memos"), {
       text: text,
-      createdAt: Date.now()
+      createdAt: serverTimestamp() // Firestore 서버 시각(request.time)으로 저장
     });
   } catch (error) {
     console.error("메모 추가 실패:", error);
