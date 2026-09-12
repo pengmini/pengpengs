@@ -63,7 +63,11 @@ function loadMemos() {
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
   try {
-    // 보안 규칙 검증: 1자 이상 50자 이하
+    // 보안 규칙 검증: 5자 이상 50자 이하
+    if (text.length < 5) {
+      alert("메모는 5글자 이상 작성해 주세요.");
+      return;
+    }
     if (text.length > 50) {
       alert("메모는 50자 이하로 작성해 주세요.");
       return;
@@ -138,6 +142,11 @@ input.addEventListener("keydown", async function (e) {
 
     const text = input.value.trim();
     if (text === "") return;
+
+    if (text.length < 5) {
+      alert("메모는 5글자 이상 작성해 주세요.");
+      return;
+    }
 
     input.value = "";
     await addMemo(text);
