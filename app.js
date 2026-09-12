@@ -44,6 +44,28 @@ const provider = new GoogleAuthProvider();
 // 현재 로그인한 사용자 정보 (로그아웃 상태면 null)
 let currentUser = null;
 
+// --- 사용자 및 역할 관리 (백엔드 2) ---
+// 교사(teacher)로 등록할 Google 이메일이나 UID 목록입니다.
+// 여기에 등록된 계정은 'teacher', 그 외의 모든 로그인 사용자는 'student'로 인식됩니다.
+const TEACHER_EMAILS = [
+  // 선생님의 구글 이메일을 여기에 입력해 주세요 (예: "teacher@example.com")
+];
+const TEACHER_UIDS = [
+  // 또는 선생님의 UID를 여기에 입력해 주세요
+];
+
+// 사용자의 역할을 판별하는 함수 ('teacher' 또는 'student')
+function getUserRole(user) {
+  if (!user) return null;
+  if (
+    (user.email && TEACHER_EMAILS.includes(user.email)) ||
+    (user.uid && TEACHER_UIDS.includes(user.uid))
+  ) {
+    return "teacher";
+  }
+  return "student";
+}
+
 
 // --- 메모 목록 ---
 // Firestore에서 실시간으로 불러온 메모들을 담아둘 배열입니다.
@@ -74,6 +96,11 @@ function loadMemos() {
 // 메모를 새로 씁니다.
 // 백엔드 2: 여기에 "누가 썼는지"(uid)를 함께 저장하게 됩니다.
 async function addMemo(text) {
+  if (!currentUser) {
+    alert("로그인한 사용자만 메모를 작성할 수 있습니다.");
+    return;
+  }
+
   try {
     // 보안 규칙 검증: 5자 이상 50자 이하
     if (text.length < 5) {
@@ -87,7 +114,8 @@ async function addMemo(text) {
 
     await addDoc(collection(db, "memos"), {
       text: text,
-      createdAt: serverTimestamp() // Firestore 서버 시각(request.time)으로 저장
+      createdAt: serverTimestamp(), // Firestore 서버 시각(request.time)으로 저장
+      uid: currentUser.uid          // 작성자 UID 저장 (백엔드 2)
     });
   } catch (error) {
     console.error("메모 추가 실패:", error);
@@ -96,13 +124,13 @@ async function addMemo(text) {
 }
 
 // 메모를 지웁니다.
-// 백엔드 2: 지금은 누구든 남의 메모를 지울 수 있습니다. 이걸 막는 것이 과제입니다.
+// 교사는 모든 메모를 지울 수 있고, 학생은 본인이 작성한 메모만 지울 수 있습니다.
 async function deleteMemo(id) {
   try {
     await deleteDoc(doc(db, "memos", id));
   } catch (error) {
     console.error("메모 삭제 실패:", error);
-    alert("메모를 삭제하지 못했습니다. 다시 시도해 주세요.");
+    alert("메모를 삭제할 권한이 없거나 삭제에 실패했습니다.");
   }
 }
 
@@ -125,13 +153,20 @@ function makeMemo(memo) {
   const div = document.createElement("div");
   div.className = "memo";
 
-  const del = document.createElement("button");
-  del.textContent = "×";
-  // 인라인 속성 대신 addEventListener로 이벤트 등록
-  del.addEventListener("click", function () {
-    deleteMemo(memo.id);
-  });
-  div.appendChild(del);
+  // 삭제 권한 확인:
+  // 교사(teacher)는 모든 메모 삭제 가능, 학생(student)은 본인 메모(uid 일치)만 삭제 가능
+  const role = getUserRole(currentUser);
+  const canDelete = currentUser && (role === "teacher" || (memo.uid && memo.uid === currentUser.uid));
+
+  if (canDelete) {
+    const del = document.createElement("button");
+    del.textContent = "×";
+    // 인라인 속성 대신 addEventListener로 이벤트 등록
+    del.addEventListener("click", function () {
+      deleteMemo(memo.id);
+    });
+    div.appendChild(del);
+  }
 
   const span = document.createElement("span");
   span.textContent = memo.text;
@@ -151,6 +186,11 @@ const input = document.getElementById("input");
 input.addEventListener("keydown", async function (e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
+
+    if (!currentUser) {
+      alert("로그인한 사용자만 메모를 작성할 수 있습니다.");
+      return;
+    }
 
     const text = input.value.trim();
     if (text === "") return;
@@ -177,9 +217,12 @@ function renderUserArea() {
   userArea.innerHTML = "";
 
   if (currentUser) {
-    // 로그인 상태: 사용자 이름(또는 이메일)과 로그아웃 버튼 표시
+    // 로그인 상태: 사용자 역할(교사/학생) 및 이름, 로그아웃 버튼 표시
+    const role = getUserRole(currentUser);
+    const roleBadge = role === "teacher" ? " [교사]" : " [학생]";
+
     const nameSpan = document.createElement("span");
-    nameSpan.textContent = `${currentUser.displayName || currentUser.email || "사용자"}님 환영합니다! `;
+    nameSpan.textContent = `${currentUser.displayName || currentUser.email || "사용자"}님${roleBadge} 환영합니다! `;
     nameSpan.style.marginRight = "8px";
 
     const logoutBtn = document.createElement("button");
@@ -223,5 +266,6 @@ input.focus();
 onAuthStateChanged(auth, function (user) {
   currentUser = user;
   renderUserArea();
+  render(); // 사용자 로그인/역할에 맞춰 담벼락 삭제 권한(× 버튼) 새로고침
 });
 
