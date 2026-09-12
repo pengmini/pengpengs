@@ -16,6 +16,13 @@ import {
   onSnapshot,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 // Firebase 설정
 const firebaseConfig = {
@@ -28,9 +35,14 @@ const firebaseConfig = {
   measurementId: "G-BGJVR4NL0H"
 };
 
-// Firebase 및 Firestore 초기화
+// Firebase, Firestore, Auth 초기화
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const provider = new GoogleAuthProvider();
+
+// 현재 로그인한 사용자 정보 (로그아웃 상태면 null)
+let currentUser = null;
 
 
 // --- 메모 목록 ---
@@ -154,7 +166,62 @@ input.addEventListener("keydown", async function (e) {
 });
 
 
+// ===================================================
+// 로그인 영역 그리기 (백엔드 2)
+// ===================================================
+
+function renderUserArea() {
+  const userArea = document.getElementById("userArea");
+  if (!userArea) return;
+
+  userArea.innerHTML = "";
+
+  if (currentUser) {
+    // 로그인 상태: 사용자 이름(또는 이메일)과 로그아웃 버튼 표시
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = `${currentUser.displayName || currentUser.email || "사용자"}님 환영합니다! `;
+    nameSpan.style.marginRight = "8px";
+
+    const logoutBtn = document.createElement("button");
+    logoutBtn.textContent = "로그아웃";
+    logoutBtn.addEventListener("click", async function () {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        console.error("로그아웃 실패:", error);
+        alert("로그아웃 중 오류가 발생했습니다.");
+      }
+    });
+
+    userArea.appendChild(nameSpan);
+    userArea.appendChild(logoutBtn);
+  } else {
+    // 로그아웃 상태: Google 로그인 버튼 표시
+    const loginBtn = document.createElement("button");
+    loginBtn.textContent = "Google로 로그인";
+    loginBtn.addEventListener("click", async function () {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (error) {
+        console.error("로그인 실패:", error);
+        if (error.code !== "auth/popup-closed-by-user") {
+          alert("로그인에 실패했습니다. Firebase 콘솔의 Authentication 승인 도메인을 확인해 주세요.");
+        }
+      }
+    });
+
+    userArea.appendChild(loginBtn);
+  }
+}
+
+
 // 실시간 메모 읽기 시작
 loadMemos();
 input.focus();
+
+// 로그인 상태 감시 시작
+onAuthStateChanged(auth, function (user) {
+  currentUser = user;
+  renderUserArea();
+});
 
